@@ -33,6 +33,15 @@ in
       default = null;
       description = "Network interface on which to allow traffic.";
     };
+
+    allowPorts = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Set up the firewall to allow traffic on the given interface or on all
+        interfaces if none given.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -46,19 +55,26 @@ in
         "--network=host"
       ];
 
-      cmd = if cfg.dhcp then [] else ["--disable-dhcp"];
+      cmd =
+        if cfg.dhcp
+          then (if cfg.interface != null
+                  then ["--dhcp-ifs=${cfg.interface}"]
+                  else [])
+          else ["--disable-dhcp"];
     };
 
     networking.firewall.allowedTCPPorts =
-      mkIf (cfg.interface == null) [8091 8092];
+      mkIf (cfg.allowPorts && cfg.interface == null) [8091 8092];
     networking.firewall.allowedUDPPorts =
-      mkIf (cfg.dhcp && cfg.interface == null) [67 68 4011];
+      mkIf (cfg.allowPorts && cfg.interface == null)
+        ([69] ++ (if cfg.dhcp then [67 68 4011] else []));
 
-    networking.firewall.interfaces = mkIf (cfg.interface != null) {
-      "${cfg.interface}" = {
-        allowedTCPPorts = [8091 8092];
-        allowedUDPPorts = mkIf cfg.dhcp [67 68 4011];
+    networking.firewall.interfaces =
+      mkIf (cfg.allowPorts && cfg.interface != null) {
+        "${cfg.interface}" = {
+          allowedTCPPorts = [8091 8092];
+          allowedUDPPorts = [69] ++ (if cfg.dhcp then [67 68 4011] else []);
+        };
       };
-    };
   };
 }
